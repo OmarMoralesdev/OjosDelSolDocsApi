@@ -1,0 +1,1969 @@
+openapi: 3.0.3
+info:
+  title: Ojos de Sol API
+  description: |
+    API REST para el sistema de monitoreo y control de paneles solares **Ojos de Sol**.
+
+    ## Módulos
+    - **Autenticación**: Registro, login, logout y recuperación de contraseña con JWT.
+    - **Usuarios**: Gestión administrativa de cuentas (CRUD, activar/desactivar).
+    - **Roles y Permisos**: Gestión de roles diferenciados (Administrador, Cliente).
+    - **Dispositivos**: Vinculación, configuración y gestión de dispositivos ESP32.
+    - **Telemetría**: Datos en tiempo real (voltaje, corriente, potencia, energía) e históricos.
+    - **Comandos**: Envío de comandos manuales de ángulo al servomotor del panel solar.
+    - **Alertas y Notificaciones**: Sistema de alertas automáticas y notificaciones push.
+    - **Horarios**: Programación de horarios de operación por dispositivo.
+    - **Reportes**: Exportación de resúmenes de generación energética en PDF.
+    - **Auditoría**: Log de actividad de acceso y acciones por usuario.
+  version: 1.0.0
+  contact:
+    name: Equipo Ojos de Sol
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Servidor de Desarrollo Local
+
+# ──────────────────────────────────────────────
+# PATHS
+# ──────────────────────────────────────────────
+paths:
+  # ═══════════════════════════════════════════
+  #  SISTEMA
+  # ═══════════════════════════════════════════
+  /health:
+    get:
+      summary: Verificar estado de la API
+      description: Retorna el estado actual de salud del servidor. Debe responder en menos de 500 ms.
+      operationId: getHealth
+      tags:
+        - Sistema
+      responses:
+        "200":
+          description: El servicio está disponible y funcionando correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "OK"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2026-06-20T12:00:00Z"
+                  uptime:
+                    type: number
+                    description: Tiempo de actividad del servidor en segundos
+                    example: 86400
+
+  # ═══════════════════════════════════════════
+  #  AUTENTICACIÓN
+  # ═══════════════════════════════════════════
+  /auth/register:
+    post:
+      summary: Registrar un nuevo usuario
+      description: |
+        Permite registrar un cliente o administrador en la plataforma.
+        Requiere nombre, correo electrónico, contraseña y rol.
+        Las contraseñas se almacenan como hash bcrypt con factor de costo mínimo de 10.
+      operationId: registerUser
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registro exitoso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Datos de entrada inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El correo electrónico ya se encuentra registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      summary: Iniciar sesión
+      description: |
+        Autentica al usuario mediante correo electrónico y contraseña.
+        Devuelve un token JWT para acceder a los recursos protegidos.
+        Todas las comunicaciones deben realizarse sobre HTTPS/TLS 1.2+.
+      operationId: loginUser
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Autenticación exitosa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Credenciales incorrectas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      summary: Cerrar sesión
+      description: Invalida el token JWT del usuario actual (aplicación móvil y web).
+      operationId: logoutUser
+      tags:
+        - Autenticación
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Sesión cerrada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Sesión cerrada correctamente"
+        "401":
+          description: Token inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/forgot-password:
+    post:
+      summary: Solicitar recuperación de contraseña
+      description: Envía un enlace de recuperación de contraseña al correo electrónico del usuario.
+      operationId: forgotPassword
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "usuario@ojosdesol.com"
+      responses:
+        "200":
+          description: Enlace de recuperación enviado al correo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Se ha enviado un enlace de recuperación a tu correo electrónico"
+        "404":
+          description: Correo electrónico no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/reset-password:
+    post:
+      summary: Restablecer contraseña
+      description: Permite al usuario establecer una nueva contraseña usando el token recibido por correo.
+      operationId: resetPassword
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - newPassword
+              properties:
+                token:
+                  type: string
+                  description: Token de recuperación recibido por correo
+                  example: "eyJhbGciOiJIUzI1NiJ9..."
+                newPassword:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: "NuevaContraseña123!"
+      responses:
+        "200":
+          description: Contraseña restablecida exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Contraseña actualizada correctamente"
+        "400":
+          description: Token inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════
+  #  USUARIOS (Administración)
+  # ═══════════════════════════════════════════
+  /users:
+    get:
+      summary: Listar todos los usuarios
+      description: |
+        Muestra la lista completa de usuarios con su información y estado de cuenta.
+        Solo accesible por administradores. Soporta paginación.
+      operationId: getUsers
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          description: Filtrar por estado de la cuenta
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+      responses:
+        "200":
+          description: Lista paginada de usuarios
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedUsers"
+        "401":
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin permisos de administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      summary: Crear un usuario (Admin)
+      description: Permite a un administrador crear una nueva cuenta de usuario con rol asignado.
+      operationId: createUser
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Usuario creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin permisos de administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{userId}:
+    get:
+      summary: Obtener detalle de un usuario
+      description: Retorna la información completa de un usuario específico.
+      operationId: getUserById
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "200":
+          description: Detalle del usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      summary: Editar un usuario (Admin)
+      description: Permite a un administrador actualizar los datos de una cuenta de usuario.
+      operationId: updateUser
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      summary: Eliminar un usuario (Admin)
+      description: Permite a un administrador eliminar una cuenta de usuario del sistema.
+      operationId: deleteUser
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          description: Usuario eliminado exitosamente
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{userId}/status:
+    patch:
+      summary: Activar o desactivar cuenta de usuario (Admin)
+      description: Permite al administrador cambiar el estado de una cuenta de usuario (activar/desactivar).
+      operationId: toggleUserStatus
+      tags:
+        - Usuarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - active
+              properties:
+                active:
+                  type: boolean
+                  description: Estado deseado de la cuenta
+                  example: false
+      responses:
+        "200":
+          description: Estado de la cuenta actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════
+  #  ROLES Y PERMISOS
+  # ═══════════════════════════════════════════
+  /roles:
+    get:
+      summary: Listar roles del sistema
+      description: Retorna todos los roles disponibles con sus permisos asignados.
+      operationId: getRoles
+      tags:
+        - Roles y Permisos
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lista de roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+
+    post:
+      summary: Crear un rol (Admin)
+      description: Permite al administrador crear un nuevo rol con permisos específicos.
+      operationId: createRole
+      tags:
+        - Roles y Permisos
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "201":
+          description: Rol creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+
+  /roles/{roleId}:
+    put:
+      summary: Editar un rol (Admin)
+      description: Permite al administrador actualizar el nombre y los permisos de un rol existente.
+      operationId: updateRole
+      tags:
+        - Roles y Permisos
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "200":
+          description: Rol actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+
+    delete:
+      summary: Eliminar un rol (Admin)
+      description: Elimina un rol del sistema. No se puede eliminar un rol que tenga usuarios asignados.
+      operationId: deleteRole
+      tags:
+        - Roles y Permisos
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Rol eliminado exitosamente
+        "409":
+          description: El rol tiene usuarios asignados y no puede eliminarse
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════
+  #  DISPOSITIVOS (ESP32)
+  # ═══════════════════════════════════════════
+  /devices:
+    get:
+      summary: Listar dispositivos del usuario
+      description: |
+        Retorna la lista de dispositivos ESP32 vinculados al usuario autenticado.
+        Si el usuario es administrador, retorna todos los dispositivos registrados en el sistema.
+        Soporta paginación.
+      operationId: getDevices
+      tags:
+        - Dispositivos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          description: Filtrar por estado de conectividad
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+      responses:
+        "200":
+          description: Lista paginada de dispositivos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedDevices"
+        "401":
+          description: No autorizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      summary: Vincular un dispositivo ESP32
+      description: |
+        Vincula un nuevo dispositivo ESP32 a la cuenta del usuario autenticado.
+        Se requiere la dirección MAC como identificador único del dispositivo.
+        Permite asignar un nombre descriptivo (alias) al dispositivo.
+      operationId: linkDevice
+      tags:
+        - Dispositivos
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkDeviceRequest"
+      responses:
+        "201":
+          description: Dispositivo vinculado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          description: Datos inválidos o MAC address ya registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /devices/{deviceId}:
+    get:
+      summary: Obtener detalle de un dispositivo
+      description: Retorna la información completa de un dispositivo específico, incluyendo su estado de conectividad y ángulo actual del panel.
+      operationId: getDeviceById
+      tags:
+        - Dispositivos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      responses:
+        "200":
+          description: Detalle del dispositivo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          description: Dispositivo no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      summary: Actualizar alias del dispositivo
+      description: Permite modificar el nombre descriptivo (alias) asignado al dispositivo.
+      operationId: updateDevice
+      tags:
+        - Dispositivos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                alias:
+                  type: string
+                  description: Nuevo nombre descriptivo para el dispositivo
+                  example: "Panel Solar Techo Norte"
+      responses:
+        "200":
+          description: Dispositivo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+
+    delete:
+      summary: Desvincular un dispositivo
+      description: Desvincula un dispositivo ESP32 de la cuenta del usuario autenticado.
+      operationId: unlinkDevice
+      tags:
+        - Dispositivos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      responses:
+        "204":
+          description: Dispositivo desvinculado exitosamente
+        "404":
+          description: Dispositivo no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /devices/{deviceId}/tracking:
+    patch:
+      summary: Habilitar o deshabilitar seguimiento solar automático
+      description: Activa o desactiva el modo de seguimiento solar automático para un dispositivo específico.
+      operationId: toggleSolarTracking
+      tags:
+        - Dispositivos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+                  description: Activar (true) o desactivar (false) el seguimiento solar automático
+                  example: true
+      responses:
+        "200":
+          description: Modo de seguimiento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          description: Dispositivo no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════
+  #  TELEMETRÍA
+  # ═══════════════════════════════════════════
+  /devices/{deviceId}/telemetry:
+    get:
+      summary: Obtener datos de telemetría en tiempo real
+      description: |
+        Retorna los datos de telemetría más recientes del dispositivo:
+        voltaje (V), corriente (A), potencia (W), energía acumulada (Wh),
+        ángulo actual del panel y nivel de batería.
+      operationId: getDeviceTelemetry
+      tags:
+        - Telemetría
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      responses:
+        "200":
+          description: Datos de telemetría actuales
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetryData"
+        "404":
+          description: Dispositivo no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /devices/{deviceId}/telemetry/history:
+    get:
+      summary: Historial de telemetría con filtro de fechas
+      description: |
+        Retorna el historial de datos de telemetría almacenados para un dispositivo.
+        Permite filtrar por rango de fechas. Los datos se almacenan en MongoDB.
+      operationId: getTelemetryHistory
+      tags:
+        - Telemetría
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+        - name: startDate
+          in: query
+          description: Fecha de inicio del rango (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-06-01T00:00:00Z"
+        - name: endDate
+          in: query
+          description: Fecha de fin del rango (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-06-20T23:59:59Z"
+        - name: interval
+          in: query
+          description: Intervalo de agrupación de datos
+          required: false
+          schema:
+            type: string
+            enum: [hourly, daily, weekly, monthly]
+            default: hourly
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Historial de telemetría
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TelemetryData"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+  /devices/{deviceId}/telemetry/summary:
+    get:
+      summary: Resumen de generación energética
+      description: |
+        Genera un resumen de la generación energética del dispositivo.
+        Soporta resolución diaria, semanal y mensual.
+        Incluye comparativa entre energía generada y energía consumida.
+      operationId: getTelemetrySummary
+      tags:
+        - Telemetría
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+        - name: period
+          in: query
+          description: Período del resumen
+          required: true
+          schema:
+            type: string
+            enum: [today, weekly, monthly]
+            example: today
+      responses:
+        "200":
+          description: Resumen de generación energética
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnergySummary"
+
+  # ═══════════════════════════════════════════
+  #  COMANDOS (Control del Panel)
+  # ═══════════════════════════════════════════
+  /devices/{deviceId}/commands:
+    get:
+      summary: Historial de comandos enviados
+      description: |
+        Retorna el historial de comandos enviados al servomotor del panel solar,
+        con su estado de entrega (QUEUED, DELIVERED, REJECTED). Soporta paginación.
+      operationId: getDeviceCommands
+      tags:
+        - Comandos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+        - name: status
+          in: query
+          description: Filtrar por estado de entrega
+          required: false
+          schema:
+            type: string
+            enum: [QUEUED, DELIVERED, REJECTED]
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Historial de comandos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Command"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+    post:
+      summary: Enviar comando manual de ángulo al panel
+      description: |
+        Permite al usuario enviar un comando de ángulo (en grados) al servomotor del panel solar.
+        El comando se encola para entrega y se registra con estado de seguimiento.
+      operationId: sendCommand
+      tags:
+        - Comandos
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendCommandRequest"
+      responses:
+        "201":
+          description: Comando encolado para entrega
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Command"
+        "400":
+          description: Ángulo fuera de rango o datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ═══════════════════════════════════════════
+  #  ALERTAS Y NOTIFICACIONES
+  # ═══════════════════════════════════════════
+  /alerts:
+    get:
+      summary: Listar alertas del usuario
+      description: |
+        Retorna las alertas generadas para los dispositivos del usuario autenticado.
+        Tipos de alerta:
+        - Baja generación energética respecto al promedio histórico.
+        - Nivel de batería superior al 95% (corte de carga activado).
+        - Pérdida de conectividad del dispositivo por más de 10 minutos.
+      operationId: getAlerts
+      tags:
+        - Alertas y Notificaciones
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          description: Filtrar por tipo de alerta
+          required: false
+          schema:
+            type: string
+            enum: [LOW_GENERATION, BATTERY_OVERCHARGE, CONNECTIVITY_LOSS]
+        - name: acknowledged
+          in: query
+          description: Filtrar por estado de reconocimiento
+          required: false
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Lista de alertas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Alert"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+  /alerts/{alertId}/acknowledge:
+    patch:
+      summary: Reconocer una alerta
+      description: Marca una alerta como reconocida/leída por el usuario.
+      operationId: acknowledgeAlert
+      tags:
+        - Alertas y Notificaciones
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Alerta reconocida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /notifications/push/register:
+    post:
+      summary: Registrar token de notificaciones push
+      description: Registra el token del dispositivo móvil para recibir notificaciones push cuando se genere una alerta.
+      operationId: registerPushToken
+      tags:
+        - Alertas y Notificaciones
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - platform
+              properties:
+                token:
+                  type: string
+                  description: Token de notificación push (FCM/APNs)
+                  example: "dGhpcyBpcyBhIHRlc3QgdG9rZW4..."
+                platform:
+                  type: string
+                  enum: [IOS, ANDROID]
+                  description: Plataforma del dispositivo móvil
+                  example: "IOS"
+      responses:
+        "200":
+          description: Token registrado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Token de notificaciones push registrado correctamente"
+
+  # ═══════════════════════════════════════════
+  #  HORARIOS DE OPERACIÓN
+  # ═══════════════════════════════════════════
+  /devices/{deviceId}/schedules:
+    get:
+      summary: Listar horarios de un dispositivo
+      description: Retorna todos los horarios de operación configurados para un dispositivo específico.
+      operationId: getDeviceSchedules
+      tags:
+        - Horarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      responses:
+        "200":
+          description: Lista de horarios configurados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Schedule"
+
+    post:
+      summary: Crear horario de operación
+      description: Programa un nuevo horario de operación (hora inicio y hora fin) para un dispositivo.
+      operationId: createSchedule
+      tags:
+        - Horarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleRequest"
+      responses:
+        "201":
+          description: Horario creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+
+  /devices/{deviceId}/schedules/{scheduleId}:
+    put:
+      summary: Editar horario de operación
+      description: Modifica un horario de operación existente para un dispositivo.
+      operationId: updateSchedule
+      tags:
+        - Horarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleRequest"
+      responses:
+        "200":
+          description: Horario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+
+    delete:
+      summary: Eliminar horario de operación
+      description: Elimina un horario de operación programado para un dispositivo.
+      operationId: deleteSchedule
+      tags:
+        - Horarios
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Horario eliminado
+
+  # ═══════════════════════════════════════════
+  #  CONFIGURACIÓN DE UMBRALES DE ALERTA
+  # ═══════════════════════════════════════════
+  /devices/{deviceId}/alert-settings:
+    get:
+      summary: Obtener configuración de umbrales de alerta
+      description: Retorna los umbrales de alerta configurados para un dispositivo (nivel de batería, rendimiento mínimo).
+      operationId: getAlertSettings
+      tags:
+        - Alertas y Notificaciones
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      responses:
+        "200":
+          description: Configuración de umbrales de alerta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertSettings"
+
+    put:
+      summary: Configurar umbrales de alerta
+      description: Permite al usuario configurar los umbrales personalizados de alertas para un dispositivo.
+      operationId: updateAlertSettings
+      tags:
+        - Alertas y Notificaciones
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertSettings"
+      responses:
+        "200":
+          description: Configuración de umbrales actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertSettings"
+
+  # ═══════════════════════════════════════════
+  #  REPORTES
+  # ═══════════════════════════════════════════
+  /devices/{deviceId}/reports/energy:
+    get:
+      summary: Exportar resumen de generación energética en PDF
+      description: |
+        Genera y descarga un reporte PDF con el resumen de generación energética
+        del dispositivo para el rango de fechas especificado.
+      operationId: exportEnergyReport
+      tags:
+        - Reportes
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DeviceIdParam"
+        - name: startDate
+          in: query
+          description: Fecha de inicio del reporte
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-06-01"
+        - name: endDate
+          in: query
+          description: Fecha de fin del reporte
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-06-30"
+      responses:
+        "200":
+          description: Archivo PDF generado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ═══════════════════════════════════════════
+  #  AUDITORÍA
+  # ═══════════════════════════════════════════
+  /audit-logs:
+    get:
+      summary: Consultar log de auditoría
+      description: |
+        Retorna el registro de actividad de acceso y acciones realizadas por los usuarios del sistema.
+        Solo accesible por administradores. Soporta paginación y filtros por usuario y rango de fechas.
+      operationId: getAuditLogs
+      tags:
+        - Auditoría
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          description: Filtrar logs por usuario específico
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          description: Filtrar por tipo de acción
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                LOGIN,
+                LOGOUT,
+                CREATE,
+                UPDATE,
+                DELETE,
+                COMMAND_SENT,
+                DEVICE_LINKED,
+                DEVICE_UNLINKED,
+              ]
+        - name: startDate
+          in: query
+          description: Fecha de inicio del filtro
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Fecha de fin del filtro
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Log de auditoría
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLog"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "403":
+          description: Sin permisos de administrador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+# ──────────────────────────────────────────────
+# COMPONENTS
+# ──────────────────────────────────────────────
+components:
+  # ═══ SECURITY SCHEMES ═══
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenido al iniciar sesión. Todas las comunicaciones se realizan sobre HTTPS/TLS 1.2+.
+
+  # ═══ PARAMETERS ═══
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Número de página (1-indexed)
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+        example: 1
+
+    LimitParam:
+      name: limit
+      in: query
+      description: Cantidad de registros por página
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+        example: 20
+
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      description: ID único del usuario
+      schema:
+        type: string
+        format: uuid
+
+    DeviceIdParam:
+      name: deviceId
+      in: path
+      required: true
+      description: ID único del dispositivo ESP32
+      schema:
+        type: string
+        format: uuid
+
+  # ═══ SCHEMAS ═══
+  schemas:
+    # ─── Autenticación ───
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          example: "carlos.mendez@ojosdesol.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Se almacena como hash bcrypt con factor de costo mínimo de 10
+          example: "ContraseñaSegura123!"
+        firstName:
+          type: string
+          example: "Carlos"
+        lastName:
+          type: string
+          example: "Méndez"
+        role:
+          type: string
+          enum: [ADMIN, CLIENT]
+          description: Rol del usuario en el sistema
+          example: "CLIENT"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "carlos.mendez@ojosdesol.com"
+        password:
+          type: string
+          format: password
+          example: "ContraseñaSegura123!"
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token JWT para autenticación
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          $ref: "#/components/schemas/User"
+
+    # ─── Usuarios ───
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4956-a5db-8125784d8521"
+        email:
+          type: string
+          format: email
+          example: "carlos.mendez@ojosdesol.com"
+        firstName:
+          type: string
+          example: "Carlos"
+        lastName:
+          type: string
+          example: "Méndez"
+        role:
+          type: string
+          enum: [ADMIN, CLIENT]
+          example: "CLIENT"
+        active:
+          type: boolean
+          description: Estado de la cuenta de usuario
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-06-20T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-06-20T12:00:00Z"
+
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          example: "nuevo.usuario@ojosdesol.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: "Password123!"
+        firstName:
+          type: string
+          example: "Ana"
+        lastName:
+          type: string
+          example: "García"
+        role:
+          type: string
+          enum: [ADMIN, CLIENT]
+          example: "CLIENT"
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          example: "Ana María"
+        lastName:
+          type: string
+          example: "García López"
+        role:
+          type: string
+          enum: [ADMIN, CLIENT]
+
+    PaginatedUsers:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ─── Roles y Permisos ───
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "f1a2b3c4-d5e6-7890-abcd-ef1234567890"
+        name:
+          type: string
+          example: "Administrador"
+        permissions:
+          type: array
+          items:
+            type: string
+          example:
+            [
+              "users:read",
+              "users:write",
+              "devices:read",
+              "devices:write",
+              "alerts:read",
+              "audit:read",
+            ]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateRoleRequest:
+      type: object
+      required:
+        - name
+        - permissions
+      properties:
+        name:
+          type: string
+          example: "Operador"
+        permissions:
+          type: array
+          items:
+            type: string
+          example: ["devices:read", "telemetry:read", "commands:write"]
+
+    # ─── Dispositivos ───
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        macAddress:
+          type: string
+          description: Dirección MAC del dispositivo ESP32 (identificador único)
+          pattern: "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+          example: "AA:BB:CC:DD:EE:FF"
+        alias:
+          type: string
+          description: Nombre descriptivo asignado por el usuario
+          example: "Panel Solar Techo Norte"
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          description: Estado de conectividad del dispositivo
+          example: "ACTIVE"
+        solarTrackingEnabled:
+          type: boolean
+          description: Indica si el seguimiento solar automático está habilitado
+          example: true
+        currentAngle:
+          type: number
+          description: Ángulo actual del panel solar en grados
+          minimum: 0
+          maximum: 180
+          example: 45.5
+        batteryLevel:
+          type: number
+          description: Nivel de carga de la batería en porcentaje
+          minimum: 0
+          maximum: 100
+          example: 78.3
+        userId:
+          type: string
+          format: uuid
+          description: ID del usuario propietario
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: Última vez que se recibieron datos del dispositivo
+          example: "2026-06-20T11:55:00Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-06-15T08:00:00Z"
+
+    LinkDeviceRequest:
+      type: object
+      required:
+        - macAddress
+      properties:
+        macAddress:
+          type: string
+          description: Dirección MAC del dispositivo ESP32
+          pattern: "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+          example: "AA:BB:CC:DD:EE:FF"
+        alias:
+          type: string
+          description: Nombre descriptivo opcional para el dispositivo
+          example: "Panel Solar Techo Norte"
+
+    PaginatedDevices:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Device"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    # ─── Telemetría ───
+    TelemetryData:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        voltage:
+          type: number
+          description: Voltaje en Voltios (V)
+          example: 12.45
+        current:
+          type: number
+          description: Corriente en Amperios (A)
+          example: 2.35
+        power:
+          type: number
+          description: Potencia en Watts (W)
+          example: 29.26
+        energyAccumulated:
+          type: number
+          description: Energía acumulada en Watt-hora (Wh)
+          example: 1250.75
+        panelAngle:
+          type: number
+          description: Ángulo actual del panel solar en grados
+          example: 45.5
+        batteryLevel:
+          type: number
+          description: Nivel de batería en porcentaje
+          example: 78.3
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-06-20T12:00:00Z"
+
+    TelemetryInput:
+      type: object
+      required:
+        - voltage
+        - current
+        - power
+        - energyAccumulated
+        - panelAngle
+        - batteryLevel
+      properties:
+        voltage:
+          type: number
+          example: 12.45
+        current:
+          type: number
+          example: 2.35
+        power:
+          type: number
+          example: 29.26
+        energyAccumulated:
+          type: number
+          example: 1250.75
+        panelAngle:
+          type: number
+          example: 45.5
+        batteryLevel:
+          type: number
+          example: 78.3
+
+    EnergySummary:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        period:
+          type: string
+          enum: [today, weekly, monthly]
+          example: "today"
+        energyGenerated:
+          type: number
+          description: Total de energía generada en Wh durante el período
+          example: 4520.50
+        energyConsumed:
+          type: number
+          description: Total de energía consumida en Wh durante el período
+          example: 3200.25
+        netEnergy:
+          type: number
+          description: Energía neta (generada - consumida)
+          example: 1320.25
+        averagePower:
+          type: number
+          description: Potencia promedio en W
+          example: 188.35
+        peakPower:
+          type: number
+          description: Potencia pico máxima en W
+          example: 320.50
+        hourlyBreakdown:
+          type: array
+          description: Desglose por hora (solo para período 'today')
+          items:
+            type: object
+            properties:
+              hour:
+                type: integer
+                example: 14
+              energyWh:
+                type: number
+                example: 350.25
+              averagePowerW:
+                type: number
+                example: 350.25
+
+    # ─── Comandos ───
+    Command:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "c1d2e3f4-a5b6-7890-cdef-123456789abc"
+        deviceId:
+          type: string
+          format: uuid
+        angleDegrees:
+          type: number
+          description: Ángulo en grados enviado al servomotor
+          minimum: 0
+          maximum: 180
+          example: 90
+        status:
+          type: string
+          enum: [QUEUED, DELIVERED, REJECTED]
+          description: Estado de entrega del comando
+          example: "DELIVERED"
+        sentBy:
+          type: string
+          format: uuid
+          description: ID del usuario que envió el comando
+        sentAt:
+          type: string
+          format: date-time
+          example: "2026-06-20T12:05:00Z"
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-20T12:05:02Z"
+
+    SendCommandRequest:
+      type: object
+      required:
+        - angleDegrees
+      properties:
+        angleDegrees:
+          type: number
+          description: Ángulo en grados para el servomotor del panel (0-180)
+          minimum: 0
+          maximum: 180
+          example: 90
+
+    # ─── Alertas ───
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [LOW_GENERATION, BATTERY_OVERCHARGE, CONNECTIVITY_LOSS]
+          description: |
+            - LOW_GENERATION: Energía generada significativamente menor al promedio histórico
+            - BATTERY_OVERCHARGE: Nivel de batería > 95%, corte de carga activado
+            - CONNECTIVITY_LOSS: Dispositivo sin conexión por más de 10 minutos
+          example: "BATTERY_OVERCHARGE"
+        message:
+          type: string
+          example: "El nivel de batería ha superado el 95%. Se ha activado el corte de carga automático."
+        severity:
+          type: string
+          enum: [INFO, WARNING, CRITICAL]
+          example: "WARNING"
+        acknowledged:
+          type: boolean
+          description: Indica si el usuario reconoció la alerta
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-06-20T11:45:00Z"
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AlertSettings:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        batteryOverchargeThreshold:
+          type: number
+          description: Umbral de nivel de batería para activar alerta de sobrecarga (%)
+          minimum: 50
+          maximum: 100
+          default: 95
+          example: 95
+        minGenerationThresholdPercent:
+          type: number
+          description: Porcentaje mínimo de rendimiento respecto al promedio histórico antes de generar alerta (%)
+          minimum: 10
+          maximum: 100
+          default: 70
+          example: 70
+        connectivityTimeoutMinutes:
+          type: integer
+          description: Minutos sin conexión antes de generar alerta de pérdida de conectividad
+          minimum: 1
+          maximum: 60
+          default: 10
+          example: 10
+
+    # ─── Horarios ───
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "s1c2h3e4-d5u6-7890-leid-123456789abc"
+        deviceId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: time
+          description: Hora de inicio de operación (HH:mm)
+          example: "06:00"
+        endTime:
+          type: string
+          format: time
+          description: Hora de fin de operación (HH:mm)
+          example: "18:00"
+        daysOfWeek:
+          type: array
+          description: Días de la semana en que aplica el horario (0=Domingo, 6=Sábado)
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example: [1, 2, 3, 4, 5]
+        enabled:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateScheduleRequest:
+      type: object
+      required:
+        - startTime
+        - endTime
+        - daysOfWeek
+      properties:
+        startTime:
+          type: string
+          description: Hora de inicio de operación (HH:mm)
+          example: "06:00"
+        endTime:
+          type: string
+          description: Hora de fin de operación (HH:mm)
+          example: "18:00"
+        daysOfWeek:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example: [1, 2, 3, 4, 5]
+        enabled:
+          type: boolean
+          default: true
+
+    # ─── Auditoría ───
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        userEmail:
+          type: string
+          format: email
+          example: "carlos.mendez@ojosdesol.com"
+        action:
+          type: string
+          enum:
+            [
+              LOGIN,
+              LOGOUT,
+              CREATE,
+              UPDATE,
+              DELETE,
+              COMMAND_SENT,
+              DEVICE_LINKED,
+              DEVICE_UNLINKED,
+            ]
+          example: "LOGIN"
+        resource:
+          type: string
+          description: Recurso afectado por la acción
+          example: "device:a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        details:
+          type: string
+          description: Detalles adicionales de la acción realizada
+          example: "Dispositivo 'Panel Solar Techo Norte' vinculado exitosamente"
+        ipAddress:
+          type: string
+          example: "192.168.1.100"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-06-20T12:00:00Z"
+
+    # ─── Paginación ───
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        totalItems:
+          type: integer
+          example: 150
+        totalPages:
+          type: integer
+          example: 8
+
+    # ─── Error ───
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "BAD_REQUEST"
+        message:
+          type: string
+          example: "Los datos de entrada no cumplen con las validaciones."
+        details:
+          type: array
+          description: Detalles de los errores de validación (opcional)
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "email"
+              error:
+                type: string
+                example: "Formato de correo electrónico inválido"

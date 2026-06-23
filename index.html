@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>Ojos de Sol - API Docs</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <!-- Stoplight Elements Styles & Script -->
+  <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
+
+  <style>
+    :root {
+      --primary-bg: #FAF8F5;
+      /* Crema Premium */
+      --text-color: #1E1E24;
+      /* Negro Antracita */
+      --accent-gradient: linear-gradient(135deg, #FFB703 0%, #FB8500 100%);
+      --glass-bg: rgba(250, 248, 245, 0.85);
+      /* Crema Premium Glass */
+      --glass-border: rgba(30, 30, 36, 0.08);
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--primary-bg);
+      color: var(--text-color);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--glass-border);
+      padding: 0.85rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent-gradient);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #1E1E24;
+      /* Negro Antracita para contraste en fondo amarillo */
+      box-shadow: 0 4px 14px rgba(255, 183, 3, 0.3);
+    }
+
+    .logo-text {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: #1E1E24;
+      /* Negro Antracita */
+    }
+
+    .badge {
+      background: rgba(255, 183, 3, 0.12);
+      color: #d49200;
+      /* Tono oscuro de Amarillo Solar para accesibilidad */
+      border: 1px solid rgba(255, 183, 3, 0.3);
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .actions-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .download-btn {
+      background: transparent;
+      color: #1E1E24;
+      border: 1px solid rgba(30, 30, 36, 0.15);
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .download-btn:hover {
+      background: #FFB703;
+      border-color: #FFB703;
+      box-shadow: 0 4px 12px rgba(255, 183, 3, 0.25);
+    }
+
+    .docs-container {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Estilos personalizados de Elements para fundirse con la paleta Ojos de Sol */
+    .sl-elements {
+      --sl-color-bg-base: #FAF8F5 !important;
+      /* Crema Premium */
+      --sl-color-bg-canvas: #ffffff !important;
+      /* Blanco puro para los paneles del lienzo */
+      --sl-color-border: rgba(30, 30, 36, 0.08) !important;
+      --sl-color-text-base: #1E1E24 !important;
+      /* Negro Antracita */
+      --sl-color-text-heading: #1E1E24 !important;
+      /* Negro Antracita */
+      --sl-color-text-muted: #6C757D !important;
+      /* Gris Espacial */
+      --sl-color-primary: #FFB703 !important;
+      /* Amarillo Solar */
+    }
+
+    elements-api {
+      height: 100%;
+    }
+  </style>
+</head>
+
+<body class="sl-elements">
+  <header>
+    <div class="logo-container">
+      <img src="/public/Logo-ojo-sol-web.png" alt="Ojos de Sol" class="logo-icon">
+      <span class="logo-text">Ojos de Sol</span>
+    </div>
+    <div class="actions-container">
+      <a href="openapi.yaml" download="ojos-de-sol-openapi.yaml" class="download-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Exportar especificación para Postman
+      </a>
+      <span class="badge">Documentación Oficial</span>
+    </div>
+  </header>
+
+  <div class="docs-container">
+    <elements-api apiDescriptionUrl="openapi.yaml" router="hash" layout="sidebar" />
+  </div>
+</body>
+
+</html>

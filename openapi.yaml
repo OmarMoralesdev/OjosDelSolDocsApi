@@ -1330,37 +1330,66 @@ components:
 
   # ═══ SCHEMAS ═══
   schemas:
-    # ─── Autenticación ───
+    # ───────────────────────────────────────────
+    # SQL: Autenticación
+    # ───────────────────────────────────────────
     RegisterRequest:
       type: object
       required:
+        - username
+        - name
+        - last_name
+        - birth_date
         - email
         - password
-        - firstName
-        - lastName
-        - role
+        - role_id
       properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: "^[a-zA-Z0-9_.]{3,20}$"
+          description: Nombre de usuario; letras, números, punto y guión bajo.
+          example: "carlos.mendez"
+        name:
+          type: string
+          maxLength: 50
+          description: Nombre(s) del usuario.
+          example: "Carlos"
+        last_name:
+          type: string
+          maxLength: 70
+          description: Apellido(s) del usuario.
+          example: "Méndez Gómez"
+        birth_date:
+          type: string
+          format: date
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          description: Fecha de nacimiento (ISO 8601).
+          example: "1995-08-15"
+        phone:
+          type: string
+          maxLength: 20
+          pattern: "^\\+?[0-9\\s\\-().]{7,20}$"
+          description: Número de teléfono opcional.
+          example: "+52 55 1234 5678"
         email:
           type: string
           format: email
+          maxLength: 80
+          pattern: "^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$"
+          description: Correo electrónico válido del usuario.
           example: "carlos.mendez@ojosdesol.com"
         password:
           type: string
           format: password
           minLength: 8
-          description: Se almacena como hash bcrypt con factor de costo mínimo de 10
+          description: Se almacena como hash bcrypt con factor de costo mínimo de 10.
           example: "ContraseñaSegura123!"
-        firstName:
-          type: string
-          example: "Carlos"
-        lastName:
-          type: string
-          example: "Méndez"
-        role:
-          type: string
-          enum: [ADMIN, CLIENT]
-          description: Rol del usuario en el sistema
-          example: "CLIENT"
+        role_id:
+          type: integer
+          description: "ID del rol asignado al usuario (FK → roles.id)."
+          example: 2
 
     LoginRequest:
       type: object
@@ -1382,87 +1411,147 @@ components:
       properties:
         token:
           type: string
-          description: Token JWT para autenticación
+          description: Token JWT para autenticación.
           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         user:
           $ref: "#/components/schemas/User"
 
-    # ─── Usuarios ───
+    # ───────────────────────────────────────────
+    # SQL: Tabla users
+    # ───────────────────────────────────────────
     User:
       type: object
+      description: "Almacena los usuarios registrados en el sistema. Cada usuario tiene un rol asignado."
       properties:
         id:
+          type: integer
+          description: Identificador único del usuario (PK, AUTO_INCREMENT).
+          example: 1
+        role_id:
+          type: integer
+          description: "Rol asignado al usuario (FK → roles.id)."
+          example: 2
+        username:
           type: string
-          format: uuid
-          example: "d3b07384-d113-4956-a5db-8125784d8521"
+          maxLength: 20
+          pattern: "^[a-zA-Z0-9_.]{3,20}$"
+          description: Nombre de usuario; letras, números, punto y guión bajo.
+          example: "carlos.mendez"
+        name:
+          type: string
+          maxLength: 50
+          description: Nombre(s) del usuario.
+          example: "Carlos"
+        last_name:
+          type: string
+          maxLength: 70
+          description: Apellido(s) del usuario.
+          example: "Méndez Gómez"
+        birth_date:
+          type: string
+          format: date
+          description: Fecha de nacimiento (ISO 8601).
+          example: "1995-08-15"
+        phone:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: Número de teléfono opcional.
+          example: "+52 55 1234 5678"
         email:
           type: string
           format: email
+          maxLength: 80
+          description: Correo electrónico válido del usuario.
           example: "carlos.mendez@ojosdesol.com"
-        firstName:
-          type: string
-          example: "Carlos"
-        lastName:
-          type: string
-          example: "Méndez"
-        role:
-          type: string
-          enum: [ADMIN, CLIENT]
-          example: "CLIENT"
-        active:
+        is_active:
           type: boolean
-          description: Estado de la cuenta de usuario
+          description: "TRUE = cuenta activa; FALSE = deshabilitada."
+          default: true
           example: true
-        createdAt:
+        created_at:
           type: string
           format: date-time
-          example: "2026-06-20T12:00:00Z"
-        updatedAt:
-          type: string
-          format: date-time
+          description: Fecha y hora UTC de creación.
           example: "2026-06-20T12:00:00Z"
 
     CreateUserRequest:
       type: object
       required:
+        - username
+        - name
+        - last_name
+        - birth_date
         - email
         - password
-        - firstName
-        - lastName
-        - role
+        - role_id
       properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: "^[a-zA-Z0-9_.]{3,20}$"
+          example: "ana.garcia"
+        name:
+          type: string
+          maxLength: 50
+          example: "Ana"
+        last_name:
+          type: string
+          maxLength: 70
+          example: "García López"
+        birth_date:
+          type: string
+          format: date
+          example: "1998-03-22"
+        phone:
+          type: string
+          maxLength: 20
+          example: "+52 33 9876 5432"
         email:
           type: string
           format: email
-          example: "nuevo.usuario@ojosdesol.com"
+          maxLength: 80
+          example: "ana.garcia@ojosdesol.com"
         password:
           type: string
           format: password
           minLength: 8
           example: "Password123!"
-        firstName:
-          type: string
-          example: "Ana"
-        lastName:
-          type: string
-          example: "García"
-        role:
-          type: string
-          enum: [ADMIN, CLIENT]
-          example: "CLIENT"
+        role_id:
+          type: integer
+          description: "ID del rol asignado (FK → roles.id)."
+          example: 2
 
     UpdateUserRequest:
       type: object
       properties:
-        firstName:
+        username:
           type: string
+          minLength: 3
+          maxLength: 20
+          pattern: "^[a-zA-Z0-9_.]{3,20}$"
+          example: "ana_maria.garcia"
+        name:
+          type: string
+          maxLength: 50
           example: "Ana María"
-        lastName:
+        last_name:
           type: string
+          maxLength: 70
           example: "García López"
-        role:
+        birth_date:
           type: string
-          enum: [ADMIN, CLIENT]
+          format: date
+          example: "1998-03-22"
+        phone:
+          type: string
+          maxLength: 20
+          example: "+52 33 9876 5432"
+        role_id:
+          type: integer
+          description: "ID del rol asignado (FK → roles.id)."
+          example: 2
 
     PaginatedUsers:
       type: object
@@ -1474,114 +1563,167 @@ components:
         pagination:
           $ref: "#/components/schemas/Pagination"
 
-    # ─── Roles y Permisos ───
+    # ───────────────────────────────────────────
+    # SQL: Tabla roles
+    # ───────────────────────────────────────────
     Role:
       type: object
+      description: "Catálogo de roles disponibles en el sistema (ej. Administrador, Cliente)."
       properties:
         id:
+          type: integer
+          description: Identificador único del rol (PK, AUTO_INCREMENT).
+          example: 1
+        name_role:
           type: string
-          format: uuid
-          example: "f1a2b3c4-d5e6-7890-abcd-ef1234567890"
-        name:
-          type: string
+          maxLength: 30
+          pattern: "^[a-zA-ZáéíóúÁÉÍÓÚ\\s]{2,30}$"
+          description: Nombre descriptivo del rol.
           example: "Administrador"
         permissions:
           type: array
+          description: Lista de permisos asociados al rol (relación M:N vía role_permissions).
           items:
-            type: string
-          example:
-            [
-              "users:read",
-              "users:write",
-              "devices:read",
-              "devices:write",
-              "alerts:read",
-              "audit:read",
-            ]
-        createdAt:
+            $ref: "#/components/schemas/Permission"
+        created_at:
           type: string
           format: date-time
+          description: Fecha y hora UTC de creación.
+          example: "2026-06-01T00:00:00Z"
 
     CreateRoleRequest:
       type: object
       required:
-        - name
-        - permissions
+        - name_role
+        - permission_ids
       properties:
-        name:
+        name_role:
           type: string
+          maxLength: 30
+          pattern: "^[a-zA-ZáéíóúÁÉÍÓÚ\\s]{2,30}$"
+          description: Nombre descriptivo del rol.
           example: "Operador"
-        permissions:
+        permission_ids:
           type: array
+          description: Lista de IDs de permisos a asociar al rol.
           items:
-            type: string
-          example: ["devices:read", "telemetry:read", "commands:write"]
+            type: integer
+          example: [1, 3, 5, 7]
 
-    # ─── Dispositivos ───
-    Device:
+    # ───────────────────────────────────────────
+    # SQL: Tabla permissions
+    # ───────────────────────────────────────────
+    Permission:
       type: object
+      description: "Define los permisos del sistema por módulo, submódulo y acción disponible."
       properties:
         id:
+          type: integer
+          description: Identificador único del permiso (PK, AUTO_INCREMENT).
+          example: 1
+        module:
           type: string
-          format: uuid
-          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-        macAddress:
+          maxLength: 100
+          description: Nombre del módulo funcional.
+          example: "Dispositivos"
+        submodule:
           type: string
-          description: Dirección MAC del dispositivo ESP32 (identificador único)
-          pattern: "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
-          example: "AA:BB:CC:DD:EE:FF"
+          maxLength: 100
+          nullable: true
+          description: Nombre del submódulo (si aplica).
+          example: "Telemetría"
+        action:
+          type: string
+          enum: [create, read, update, delete]
+          description: Acción permitida.
+          example: "read"
+        created_at:
+          type: string
+          format: date-time
+          description: Fecha y hora UTC de creación.
+          example: "2026-06-01T00:00:00Z"
+
+    # ───────────────────────────────────────────
+    # SQL: Tabla role_permissions (ACCESS TO - Pivote M:N)
+    # ───────────────────────────────────────────
+    RolePermission:
+      type: object
+      description: "Tabla pivote M:N que asocia roles con permisos. Define qué acciones puede ejecutar cada rol."
+      properties:
+        id:
+          type: integer
+          description: Identificador único del registro (PK, AUTO_INCREMENT).
+          example: 1
+        role_id:
+          type: integer
+          description: "Rol al que aplica el permiso (FK → roles.id)."
+          example: 1
+        permission_id:
+          type: integer
+          description: "Permiso asociado al rol (FK → permissions.id)."
+          example: 3
+
+    # ───────────────────────────────────────────
+    # SQL: Tabla devices
+    # ───────────────────────────────────────────
+    Device:
+      type: object
+      description: "Registra los dispositivos (paneles solares) asignados a cada usuario."
+      properties:
+        id:
+          type: integer
+          description: Identificador único del dispositivo (PK, AUTO_INCREMENT).
+          example: 1
+        user_id:
+          type: integer
+          description: "Propietario del dispositivo (FK → users.id)."
+          example: 1
         alias:
           type: string
-          description: Nombre descriptivo asignado por el usuario
+          maxLength: 80
+          pattern: "^[\\w\\s.'-]{2,80}$"
+          description: Nombre descriptivo asignado por el usuario.
           example: "Panel Solar Techo Norte"
+        mac_address:
+          type: string
+          maxLength: 17
+          pattern: "^([0-9A-Fa-f]{2}[:\\-]){5}[0-9A-Fa-f]{2}$"
+          description: Dirección MAC del dispositivo ESP32 (identificador único).
+          example: "AA:BB:CC:DD:EE:FF"
         status:
           type: string
-          enum: [ACTIVE, INACTIVE]
-          description: Estado de conectividad del dispositivo
-          example: "ACTIVE"
-        solarTrackingEnabled:
+          enum: [active, inactive]
+          description: Estado operativo del dispositivo.
+          default: inactive
+          example: "active"
+        auto_tracking:
           type: boolean
-          description: Indica si el seguimiento solar automático está habilitado
+          description: "TRUE = seguimiento solar automático habilitado."
+          default: false
           example: true
-        currentAngle:
-          type: number
-          description: Ángulo actual del panel solar en grados
-          minimum: 0
-          maximum: 180
-          example: 45.5
-        batteryLevel:
-          type: number
-          description: Nivel de carga de la batería en porcentaje
-          minimum: 0
-          maximum: 100
-          example: 78.3
-        userId:
-          type: string
-          format: uuid
-          description: ID del usuario propietario
-        lastSeenAt:
+        created_at:
           type: string
           format: date-time
-          description: Última vez que se recibieron datos del dispositivo
-          example: "2026-06-20T11:55:00Z"
-        createdAt:
-          type: string
-          format: date-time
+          description: Fecha y hora UTC de registro.
           example: "2026-06-15T08:00:00Z"
 
     LinkDeviceRequest:
       type: object
       required:
-        - macAddress
+        - mac_address
+        - alias
       properties:
-        macAddress:
+        mac_address:
           type: string
-          description: Dirección MAC del dispositivo ESP32
-          pattern: "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+          maxLength: 17
+          pattern: "^([0-9A-Fa-f]{2}[:\\-]){5}[0-9A-Fa-f]{2}$"
+          description: Dirección MAC del dispositivo ESP32.
           example: "AA:BB:CC:DD:EE:FF"
         alias:
           type: string
-          description: Nombre descriptivo opcional para el dispositivo
+          maxLength: 80
+          pattern: "^[\\w\\s.'-]{2,80}$"
+          description: Nombre descriptivo para el dispositivo.
           example: "Panel Solar Techo Norte"
 
     PaginatedDevices:
@@ -1594,185 +1736,257 @@ components:
         pagination:
           $ref: "#/components/schemas/Pagination"
 
-    # ─── Telemetría ───
+    # ───────────────────────────────────────────
+    # NoSQL: Colección device_telemetry
+    # ───────────────────────────────────────────
     TelemetryData:
       type: object
+      description: "Registro de telemetría en tiempo real del dispositivo ESP32. Almacenado en MongoDB."
       properties:
-        id:
+        _id:
           type: string
-          format: uuid
-        deviceId:
-          type: string
-          format: uuid
-        voltage:
+          description: Identificador único del registro (ObjectId de MongoDB).
+          example: "667575a0e4b0f12345abcdef"
+        device_id:
+          type: integer
+          description: Identificador del dispositivo asociado.
+          example: 1
+        energy_in_wh:
           type: number
-          description: Voltaje en Voltios (V)
-          example: 12.45
-        current:
-          type: number
-          description: Corriente en Amperios (A)
-          example: 2.35
-        power:
-          type: number
-          description: Potencia en Watts (W)
-          example: 29.26
-        energyAccumulated:
-          type: number
-          description: Energía acumulada en Watt-hora (Wh)
+          minimum: 0
+          description: Energía acumulada de entrada en Wh.
           example: 1250.75
-        panelAngle:
+        energy_out_wh:
           type: number
-          description: Ángulo actual del panel solar en grados
+          minimum: 0
+          description: Energía acumulada de salida en Wh.
+          example: 980.30
+        voltage_v:
+          type: number
+          minimum: 0
+          maximum: 30
+          description: Voltaje medido en volts.
+          example: 12.45
+        current_a:
+          type: number
+          minimum: 0
+          description: Corriente medida en amperes.
+          example: 2.35
+        watts_now:
+          type: number
+          minimum: 0
+          description: Potencia instantánea en watts.
+          example: 29.26
+        current_angle_deg:
+          type: number
+          minimum: 0
+          maximum: 360
+          description: Ángulo de fase de la corriente en grados.
           example: 45.5
-        batteryLevel:
-          type: number
-          description: Nivel de batería en porcentaje
-          example: 78.3
-        timestamp:
+        sensor_params:
+          type: object
+          description: Parámetros adicionales obtenidos de los sensores (JSON).
+          example:
+            temperature_c: 35.2
+            humidity_percent: 60
+            lux: 85000
+        created_at:
           type: string
           format: date-time
+          description: Fecha y hora de creación del registro.
           example: "2026-06-20T12:00:00Z"
 
     TelemetryInput:
       type: object
+      description: "Datos enviados por el dispositivo ESP32 al servidor. La latencia no debe superar 3 segundos."
       required:
-        - voltage
-        - current
-        - power
-        - energyAccumulated
-        - panelAngle
-        - batteryLevel
+        - energy_in_wh
+        - energy_out_wh
+        - voltage_v
+        - current_a
+        - watts_now
+        - current_angle_deg
+        - sensor_params
       properties:
-        voltage:
+        energy_in_wh:
           type: number
-          example: 12.45
-        current:
-          type: number
-          example: 2.35
-        power:
-          type: number
-          example: 29.26
-        energyAccumulated:
-          type: number
+          minimum: 0
           example: 1250.75
-        panelAngle:
+        energy_out_wh:
           type: number
+          minimum: 0
+          example: 980.30
+        voltage_v:
+          type: number
+          minimum: 0
+          maximum: 30
+          example: 12.45
+        current_a:
+          type: number
+          minimum: 0
+          example: 2.35
+        watts_now:
+          type: number
+          minimum: 0
+          example: 29.26
+        current_angle_deg:
+          type: number
+          minimum: 0
+          maximum: 360
           example: 45.5
-        batteryLevel:
-          type: number
-          example: 78.3
+        sensor_params:
+          type: object
+          description: Parámetros adicionales de los sensores (JSON).
+          example:
+            temperature_c: 35.2
+            humidity_percent: 60
+            lux: 85000
 
+    # ───────────────────────────────────────────
+    # NoSQL: Colección device_daily_summary
+    # ───────────────────────────────────────────
     EnergySummary:
       type: object
+      description: "Resumen diario de generación energética por dispositivo. Almacenado en MongoDB."
       properties:
-        deviceId:
+        _id:
           type: string
-          format: uuid
-        period:
+          description: Identificador único del resumen diario (ObjectId de MongoDB).
+          example: "667575a0e4b0f12345abc123"
+        device_id:
+          type: integer
+          description: Identificador del dispositivo asociado.
+          example: 1
+        date:
           type: string
-          enum: [today, weekly, monthly]
-          example: "today"
-        energyGenerated:
+          format: date-time
+          description: Fecha correspondiente al resumen diario.
+          example: "2026-06-20T00:00:00Z"
+        total_energy_in_wh:
           type: number
-          description: Total de energía generada en Wh durante el período
+          description: Energía total de entrada registrada durante el día (Wh).
           example: 4520.50
-        energyConsumed:
+        total_energy_out_wh:
           type: number
-          description: Total de energía consumida en Wh durante el período
+          description: Energía total de salida registrada durante el día (Wh).
           example: 3200.25
-        netEnergy:
-          type: number
-          description: Energía neta (generada - consumida)
-          example: 1320.25
-        averagePower:
-          type: number
-          description: Potencia promedio en W
-          example: 188.35
-        peakPower:
-          type: number
-          description: Potencia pico máxima en W
-          example: 320.50
-        hourlyBreakdown:
+        hourly_watts:
           type: array
-          description: Desglose por hora (solo para período 'today')
+          description: Arreglo con el consumo o generación por hora.
           items:
             type: object
             properties:
               hour:
                 type: integer
+                minimum: 0
+                maximum: 23
+                description: Hora del día (0-23).
                 example: 14
-              energyWh:
+              watts:
                 type: number
+                description: Consumo o generación en watts para esa hora.
                 example: 350.25
-              averagePowerW:
-                type: number
-                example: 350.25
-
-    # ─── Comandos ───
-    Command:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "c1d2e3f4-a5b6-7890-cdef-123456789abc"
-        deviceId:
-          type: string
-          format: uuid
-        angleDegrees:
-          type: number
-          description: Ángulo en grados enviado al servomotor
-          minimum: 0
-          maximum: 180
-          example: 90
-        status:
-          type: string
-          enum: [QUEUED, DELIVERED, REJECTED]
-          description: Estado de entrega del comando
-          example: "DELIVERED"
-        sentBy:
-          type: string
-          format: uuid
-          description: ID del usuario que envió el comando
-        sentAt:
+        created_at:
           type: string
           format: date-time
-          example: "2026-06-20T12:05:00Z"
-        deliveredAt:
+          description: Fecha y hora de generación del resumen.
+          example: "2026-06-21T00:05:00Z"
+
+    # ───────────────────────────────────────────
+    # NoSQL: Colección device_commands
+    # ───────────────────────────────────────────
+    Command:
+      type: object
+      description: "Comandos enviados al servomotor del panel solar. Almacenado en MongoDB."
+      properties:
+        _id:
+          type: string
+          description: Identificador único del comando (ObjectId de MongoDB).
+          example: "667575a0e4b0f12345abcabc"
+        device_id:
+          type: integer
+          description: Identificador del dispositivo asociado.
+          example: 1
+        topic:
+          type: string
+          maxLength: 250
+          description: Tópico del MQTT.
+          example: "devices/1/commands"
+        message:
+          type: object
+          description: Comando enviado al dispositivo (JSON con angle_deg).
+          properties:
+            angle_deg:
+              type: number
+              minimum: 0
+              maximum: 360
+              description: Ángulo en grados para el servomotor del panel.
+              example: 90
+        status:
+          type: string
+          enum: [queued, delivered, rejected]
+          description: Estado actual del comando.
+          default: queued
+          example: "delivered"
+        delivered_at:
           type: string
           format: date-time
           nullable: true
+          description: Fecha y hora en que el comando fue entregado al dispositivo.
+          example: "2026-06-20T12:05:02Z"
+        created_at:
+          type: string
+          format: date-time
+          description: Fecha y hora de creación del comando.
+          example: "2026-06-20T12:05:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Fecha y hora de la última actualización.
           example: "2026-06-20T12:05:02Z"
 
     SendCommandRequest:
       type: object
       required:
-        - angleDegrees
+        - topic
+        - message
       properties:
-        angleDegrees:
-          type: number
-          description: Ángulo en grados para el servomotor del panel (0-180)
-          minimum: 0
-          maximum: 180
-          example: 90
+        topic:
+          type: string
+          maxLength: 250
+          description: Tópico del MQTT.
+          example: "devices/1/commands"
+        message:
+          type: object
+          required:
+            - angle_deg
+          description: Comando a enviar al dispositivo (JSON con angle_deg).
+          properties:
+            angle_deg:
+              type: number
+              minimum: 0
+              maximum: 360
+              description: Ángulo en grados para el servomotor del panel.
+              example: 90
 
-    # ─── Alertas ───
+    # ─── Alertas (lógica de negocio, no hay tabla explícita en el diccionario) ───
     Alert:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        deviceId:
-          type: string
-          format: uuid
+        device_id:
+          type: integer
+          description: Identificador del dispositivo que generó la alerta.
+          example: 1
         type:
           type: string
           enum: [LOW_GENERATION, BATTERY_OVERCHARGE, CONNECTIVITY_LOSS]
           description: |
-            - LOW_GENERATION: Energía generada significativamente menor al promedio histórico
-            - BATTERY_OVERCHARGE: Nivel de batería > 95%, corte de carga activado
-            - CONNECTIVITY_LOSS: Dispositivo sin conexión por más de 10 minutos
+            - LOW_GENERATION: Energía generada significativamente menor al promedio histórico.
+            - BATTERY_OVERCHARGE: Nivel de batería > 95%, corte de carga activado.
+            - CONNECTIVITY_LOSS: Dispositivo sin conexión por más de 10 minutos.
           example: "BATTERY_OVERCHARGE"
         message:
           type: string
@@ -1783,13 +1997,13 @@ components:
           example: "WARNING"
         acknowledged:
           type: boolean
-          description: Indica si el usuario reconoció la alerta
+          description: Indica si el usuario reconoció la alerta.
           example: false
-        createdAt:
+        created_at:
           type: string
           format: date-time
           example: "2026-06-20T11:45:00Z"
-        acknowledgedAt:
+        acknowledged_at:
           type: string
           format: date-time
           nullable: true
@@ -1797,104 +2011,113 @@ components:
     AlertSettings:
       type: object
       properties:
-        deviceId:
-          type: string
-          format: uuid
-        batteryOverchargeThreshold:
+        device_id:
+          type: integer
+          example: 1
+        battery_overcharge_threshold:
           type: number
-          description: Umbral de nivel de batería para activar alerta de sobrecarga (%)
+          description: Umbral de nivel de batería para activar alerta de sobrecarga (%).
           minimum: 50
           maximum: 100
           default: 95
           example: 95
-        minGenerationThresholdPercent:
+        min_generation_threshold_percent:
           type: number
-          description: Porcentaje mínimo de rendimiento respecto al promedio histórico antes de generar alerta (%)
+          description: Porcentaje mínimo de rendimiento respecto al promedio histórico antes de generar alerta (%).
           minimum: 10
           maximum: 100
           default: 70
           example: 70
-        connectivityTimeoutMinutes:
+        connectivity_timeout_minutes:
           type: integer
-          description: Minutos sin conexión antes de generar alerta de pérdida de conectividad
+          description: Minutos sin conexión antes de generar alerta de pérdida de conectividad.
           minimum: 1
           maximum: 60
           default: 10
           example: 10
 
-    # ─── Horarios ───
+    # ───────────────────────────────────────────
+    # NoSQL: Colección schedules
+    # ───────────────────────────────────────────
     Schedule:
       type: object
+      description: "Horarios de operación programados por dispositivo. Almacenado en MongoDB."
       properties:
-        id:
+        _id:
+          type: integer
+          description: Identificador único del horario (PK, AUTO_INCREMENT).
+          example: 1
+        device_id:
+          type: integer
+          description: Identificador del dispositivo asociado al horario.
+          example: 1
+        label:
           type: string
-          format: uuid
-          example: "s1c2h3e4-d5u6-7890-leid-123456789abc"
-        deviceId:
-          type: string
-          format: uuid
-        startTime:
-          type: string
-          format: time
-          description: Hora de inicio de operación (HH:mm)
-          example: "06:00"
-        endTime:
-          type: string
-          format: time
-          description: Hora de fin de operación (HH:mm)
-          example: "18:00"
-        daysOfWeek:
-          type: array
-          description: Días de la semana en que aplica el horario (0=Domingo, 6=Sábado)
-          items:
-            type: integer
-            minimum: 0
-            maximum: 6
-          example: [1, 2, 3, 4, 5]
-        enabled:
-          type: boolean
-          example: true
-        createdAt:
+          maxLength: 100
+          pattern: "^.{1,100}$"
+          description: Nombre o etiqueta descriptiva del horario.
+          example: "Horario Diurno Verano"
+        start_time:
           type: string
           format: date-time
+          description: Hora de inicio de la programación.
+          example: "2026-06-20T06:00:00Z"
+        end_time:
+          type: string
+          format: date-time
+          description: Hora de finalización de la programación.
+          example: "2026-06-20T18:00:00Z"
+        active:
+          type: boolean
+          description: Indica si el horario se encuentra activo.
+          default: true
+          example: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha y hora de la última actualización.
+          example: "2026-06-20T10:30:00Z"
 
     CreateScheduleRequest:
       type: object
       required:
-        - startTime
-        - endTime
-        - daysOfWeek
+        - label
+        - start_time
+        - end_time
       properties:
-        startTime:
+        label:
           type: string
-          description: Hora de inicio de operación (HH:mm)
-          example: "06:00"
-        endTime:
+          maxLength: 100
+          pattern: "^.{1,100}$"
+          description: Nombre o etiqueta descriptiva del horario.
+          example: "Horario Diurno Verano"
+        start_time:
           type: string
-          description: Hora de fin de operación (HH:mm)
-          example: "18:00"
-        daysOfWeek:
-          type: array
-          items:
-            type: integer
-            minimum: 0
-            maximum: 6
-          example: [1, 2, 3, 4, 5]
-        enabled:
+          format: date-time
+          description: Hora de inicio de la programación.
+          example: "2026-06-20T06:00:00Z"
+        end_time:
+          type: string
+          format: date-time
+          description: Hora de finalización de la programación.
+          example: "2026-06-20T18:00:00Z"
+        active:
           type: boolean
           default: true
 
-    # ─── Auditoría ───
+    # ─── Auditoría (lógica de negocio) ───
     AuditLog:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        userId:
-          type: string
-          format: uuid
-        userEmail:
+        user_id:
+          type: integer
+          description: ID del usuario que realizó la acción.
+          example: 1
+        user_email:
           type: string
           format: email
           example: "carlos.mendez@ojosdesol.com"
@@ -1914,13 +2137,13 @@ components:
           example: "LOGIN"
         resource:
           type: string
-          description: Recurso afectado por la acción
-          example: "device:a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          description: Recurso afectado por la acción.
+          example: "device:1"
         details:
           type: string
-          description: Detalles adicionales de la acción realizada
+          description: Detalles adicionales de la acción realizada.
           example: "Dispositivo 'Panel Solar Techo Norte' vinculado exitosamente"
-        ipAddress:
+        ip_address:
           type: string
           example: "192.168.1.100"
         timestamp:
@@ -1938,10 +2161,10 @@ components:
         limit:
           type: integer
           example: 20
-        totalItems:
+        total_items:
           type: integer
           example: 150
-        totalPages:
+        total_pages:
           type: integer
           example: 8
 
@@ -1957,7 +2180,7 @@ components:
           example: "Los datos de entrada no cumplen con las validaciones."
         details:
           type: array
-          description: Detalles de los errores de validación (opcional)
+          description: Detalles de los errores de validación (opcional).
           items:
             type: object
             properties:
@@ -1967,3 +2190,4 @@ components:
               error:
                 type: string
                 example: "Formato de correo electrónico inválido"
+

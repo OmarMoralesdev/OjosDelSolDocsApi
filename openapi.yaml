@@ -56,6 +56,105 @@ paths:
                     description: Tiempo de actividad del servidor en segundos
                     example: 86400
 
+  /dashboard/metrics:
+    get:
+      summary: Obtener métricas del dashboard
+      description: |
+        Retorna los agregados principales para el dashboard administrativo.
+        Los contadores se calculan sobre usuarios, dispositivos y telemetría vigente.
+      operationId: getDashboardMetrics
+      tags:
+        - Sistema
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Métricas del dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardMetrics"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /system-configuration:
+    get:
+      summary: Obtener configuración de seguridad
+      description: Retorna la configuración global de lockout e intentos de autenticación.
+      operationId: getSystemConfiguration
+      tags:
+        - Sistema
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Configuración de seguridad
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfiguration"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    patch:
+      summary: Editar configuración de seguridad
+      description: Actualiza los valores de lockout e intentos máximos de autenticación.
+      operationId: updateSystemConfiguration
+      tags:
+        - Sistema
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSystemConfigurationRequest"
+      responses:
+        "200":
+          description: Configuración actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemConfiguration"
+        "400":
+          description: Valores de configuración inválidos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                systemConfigurationValidation:
+                  summary: Error de validación de configuración
+                  value:
+                    type: "https://api.ojosdesol.com/problems/client-validation-error"
+                    title: "Error de Validación"
+                    status: 400
+                    detail: "The request contains fields with invalid or missing values."
+                    instance: "/system-configuration"
+                    code: "CLIENT_VALIDATION_ERROR"
+                    technical_detail: "Validation failed for fields: 'lockout', 'auth_attemps'."
+                    user_message: "Los valores de configuración no son válidos."
+                    errors:
+                      - detail: "El valor de lockout debe ser un número entero mayor o igual a 1."
+                        pointer: "/lockout"
+                      - detail: "El valor de auth_attemps debe ser un número entero mayor o igual a 1."
+                        pointer: "/auth_attemps"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   # ═══════════════════════════════════════════
   #  AUTENTICACIÓN
   # ═══════════════════════════════════════════
@@ -2411,7 +2510,6 @@ components:
       type: object
       required:
         - message
-        - delivery_channel
         - email_masked
         - expires_in_seconds
       properties:
@@ -2419,11 +2517,6 @@ components:
           type: string
           description: Mensaje para informar al usuario que el código fue enviado por correo.
           example: "Se ha enviado un código de verificación a tu correo registrado."
-        delivery_channel:
-          type: string
-          enum: [EMAIL]
-          description: Canal usado para enviar el código OTP.
-          example: "EMAIL"
         email_masked:
           type: string
           description: Destino parcialmente oculto para mostrar al usuario.
@@ -2468,7 +2561,7 @@ components:
     # ───────────────────────────────────────────
     User:
       type: object
-      description: "Almacena los usuarios registrados en el sistema. Cada usuario tiene un rol asignado."
+      description: "Almacena los usuarios registrados en el sistema. Cada usuario tiene un rol asignado y un perfil con datos personales."
       properties:
         id:
           type: integer
@@ -2478,39 +2571,28 @@ components:
           type: integer
           description: "Rol asignado al usuario (FK → roles.id)."
           example: 2
-        username:
+        profile_id:
+          type: integer
+          description: "Perfil asociado al usuario (FK → profiles.id)."
+          example: 1
+        auth_code:
           type: string
-          maxLength: 20
-          pattern: "^[a-zA-Z0-9_.]{3,20}$"
-          description: Nombre de usuario; letras, números, punto y guión bajo.
-          example: "carlos.mendez"
-        name:
-          type: string
-          maxLength: 50
-          description: Nombre(s) del usuario.
-          example: "Carlos"
-        last_name:
-          type: string
-          maxLength: 70
-          description: Apellido(s) del usuario.
-          example: "Méndez Gómez"
-        birth_date:
-          type: string
-          format: date
-          description: Fecha de nacimiento (ISO 8601).
-          example: "1995-08-15"
-        phone:
-          type: string
-          maxLength: 20
+          maxLength: 6
           nullable: true
-          description: Número de teléfono opcional.
-          example: "+52 55 1234 5678"
-        email:
-          type: string
-          format: email
-          maxLength: 80
-          description: Correo electrónico válido del usuario.
-          example: "carlos.mendez@ojosdesol.com"
+          description: Código de autenticación OTP de 6 dígitos. Nulo cuando no está en proceso de 2FA.
+          example: "483921"
+        auth_attemps:
+          type: integer
+          minimum: 0
+          description: Contador de intentos fallidos de autenticación.
+          example: 0
+        profile:
+          $ref: "#/components/schemas/Profile"
+        device_count:
+          type: integer
+          minimum: 0
+          description: Cantidad de dispositivos asociados al usuario.
+          example: 3
         is_active:
           type: boolean
           description: "TRUE = cuenta activa; FALSE = deshabilitada."
@@ -2521,84 +2603,199 @@ components:
           format: date-time
           description: Fecha y hora UTC de creación.
           example: "2026-06-20T12:00:00Z"
-
-    CreateUserRequest:
-      type: object
-      required:
-        - username
-        - name
-        - last_name
-        - birth_date
-        - email
-        - password
-        - role_id
-      properties:
-        username:
+        updated_at:
           type: string
-          minLength: 3
-          maxLength: 20
-          pattern: "^[a-zA-Z0-9_.]{3,20}$"
-          example: "ana.garcia"
+          format: date-time
+          description: Fecha y hora UTC de última actualización.
+          example: "2026-06-24T15:30:00Z"
+
+    Profile:
+      type: object
+      description: "Datos personales y de contacto asociados al usuario."
+      properties:
+        id:
+          type: integer
+          description: Identificador único del perfil.
+          example: 1
         name:
           type: string
           maxLength: 50
-          example: "Ana"
-        last_name:
+          example: "Carlos"
+        paternal_surname:
           type: string
-          maxLength: 70
-          example: "García López"
-        birth_date:
+          maxLength: 50
+          example: "Méndez"
+        maternal_surname:
           type: string
-          format: date
-          example: "1998-03-22"
-        phone:
-          type: string
-          maxLength: 20
-          example: "+52 33 9876 5432"
+          maxLength: 50
+          example: "Gómez"
         email:
           type: string
           format: email
           maxLength: 80
+          example: "carlos.mendez@ojosdesol.com"
+        phone:
+          type: string
+          maxLength: 20
+          nullable: true
+          example: "+52 55 1234 5678"
+        street:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "Av. Insurgentes Sur 1234"
+        locality:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "Del Valle"
+        postal_code:
+          type: string
+          maxLength: 5
+          nullable: true
+          example: "03100"
+        city:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "Ciudad de México"
+        state:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "CDMX"
+
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - password
+        - role_id
+        - name
+        - paternal_surname
+        - maternal_surname
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 80
+          description: Correo electrónico del usuario (se almacena en profiles).
           example: "ana.garcia@ojosdesol.com"
         password:
           type: string
           format: password
           minLength: 8
+          description: Se almacena como hash bcrypt con factor de costo mínimo de 10.
           example: "Password123!"
         role_id:
           type: integer
           description: "ID del rol asignado (FK → roles.id)."
           example: 2
+        name:
+          type: string
+          maxLength: 50
+          description: Nombre del usuario.
+          example: "Ana"
+        paternal_surname:
+          type: string
+          maxLength: 50
+          description: Apellido paterno.
+          example: "García"
+        maternal_surname:
+          type: string
+          maxLength: 50
+          description: Apellido materno.
+          example: "López"
+        phone:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: Número de teléfono opcional.
+          example: "+52 33 9876 5432"
+        street:
+          type: string
+          maxLength: 60
+          nullable: true
+          description: Calle y número.
+          example: "Av. Reforma 1234"
+        locality:
+          type: string
+          maxLength: 60
+          nullable: true
+          description: Localidad o colonia.
+          example: "Benito Juárez"
+        postal_code:
+          type: string
+          maxLength: 5
+          nullable: true
+          description: Código postal.
+          example: "06500"
+        city:
+          type: string
+          maxLength: 60
+          nullable: true
+          description: Ciudad.
+          example: "Ciudad de México"
+        state:
+          type: string
+          maxLength: 60
+          nullable: true
+          description: Estado o provincia.
+          example: "CDMX"
 
     UpdateUserRequest:
       type: object
       properties:
-        username:
-          type: string
-          minLength: 3
-          maxLength: 20
-          pattern: "^[a-zA-Z0-9_.]{3,20}$"
-          example: "ana_maria.garcia"
-        name:
-          type: string
-          maxLength: 50
-          example: "Ana María"
-        last_name:
-          type: string
-          maxLength: 70
-          example: "García López"
-        birth_date:
-          type: string
-          format: date
-          example: "1998-03-22"
-        phone:
-          type: string
-          maxLength: 20
-          example: "+52 33 9876 5432"
         role_id:
           type: integer
           description: "ID del rol asignado (FK → roles.id)."
           example: 2
+        name:
+          type: string
+          maxLength: 50
+          description: Nombre del usuario.
+          example: "Ana María"
+        paternal_surname:
+          type: string
+          maxLength: 50
+          description: Apellido paterno.
+          example: "García"
+        maternal_surname:
+          type: string
+          maxLength: 50
+          description: Apellido materno.
+          example: "López"
+        phone:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: Número de teléfono.
+          example: "+52 33 9876 5432"
+        street:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "Av. Reforma 1234"
+        locality:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "Benito Juárez"
+        postal_code:
+          type: string
+          maxLength: 5
+          nullable: true
+          example: "06500"
+        city:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "Ciudad de México"
+        state:
+          type: string
+          maxLength: 60
+          nullable: true
+          example: "CDMX"
 
     PaginatedUsers:
       type: object
@@ -2609,6 +2806,85 @@ components:
             $ref: "#/components/schemas/User"
         pagination:
           $ref: "#/components/schemas/Pagination"
+
+    DashboardMetrics:
+      type: object
+      description: "Métricas agregadas para el panel administrativo."
+      properties:
+        registered_clients:
+          type: integer
+          minimum: 0
+          description: Número total de clientes registrados.
+          example: 128
+        active_panels:
+          type: integer
+          minimum: 0
+          description: Número total de paneles activos.
+          example: 94
+        admin_users:
+          type: integer
+          minimum: 0
+          description: Número de usuarios con rol administrador.
+          example: 3
+        support_users:
+          type: integer
+          minimum: 0
+          description: Número de usuarios con rol soporte.
+          example: 2
+        total_energy_generated_wh:
+          type: number
+          minimum: 0
+          description: Energía total generada en Wh.
+          example: 125430.75
+        average_voltage_v:
+          type: number
+          description: Voltaje promedio total en V.
+          example: 12.48
+        average_current_a:
+          type: number
+          description: Corriente promedio total en A.
+          example: 2.31
+        generated_at:
+          type: string
+          format: date-time
+          description: Momento de generación de la métrica.
+          example: "2026-06-24T12:00:00Z"
+
+    SystemConfiguration:
+      type: object
+      description: "Configuración global de seguridad para lockout e intentos de autenticación."
+      properties:
+        id:
+          type: integer
+          example: 1
+        lockout:
+          type: integer
+          minimum: 1
+          description: Duración del bloqueo de cuenta en minutos.
+          example: 15
+        auth_attemps:
+          type: integer
+          minimum: 1
+          description: Número máximo de intentos fallidos permitidos antes del bloqueo.
+          example: 5
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-06-24T12:00:00Z"
+
+    UpdateSystemConfigurationRequest:
+      type: object
+      properties:
+        lockout:
+          type: integer
+          minimum: 1
+          description: Duración del bloqueo de cuenta en minutos.
+          example: 15
+        auth_attemps:
+          type: integer
+          minimum: 1
+          description: Número máximo de intentos fallidos permitidos antes del bloqueo.
+          example: 5
 
     # ───────────────────────────────────────────
     # SQL: Tabla roles

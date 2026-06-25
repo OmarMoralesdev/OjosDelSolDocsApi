@@ -1,295 +1,190 @@
-// =====================================================================
-// PROYECTO: Ojos de Sol (IoT Solar Panel Monitoring)
-// =====================================================================
-// Esquema de Base de Datos Híbrido (Relacional SQL + Documental MongoDB)
-// =====================================================================
-
-// ---------------------------------------------------------------------
-// ENUMS (SQL)
-// ---------------------------------------------------------------------
-
-enum action_type {
-  create
-  read
-  update
-  delete
-}
-
-enum device_status_type {
-  active
-  inactive
-}
-
-enum platform_type {
-  IOS
-  ANDROID
-}
-
-// ---------------------------------------------------------------------
-// ENUMS (NoSQL / MongoDB)
-// ---------------------------------------------------------------------
-
-enum command_status_type {
-  queued
-  delivered
-  rejected
-}
-
-enum alert_type {
-  LOW_GEN
-  BATT_OVER
-  CONN_LOSS
-}
-
-enum alert_severity_type {
-  INFO
-  WARNING
-  CRITICAL
-}
-
-// =====================================================================
-// GRUPO DE TABLAS SQL (Base de datos transaccional / estructurada)
-// =====================================================================
-
-Table roles {
-  id smallint [pk, increment, note: 'Identificador único de rol']
-  name_role varchar(30) [unique, not null, note: 'Nombre del rol (ej. ADMIN, OPERATOR)']
-  created_at timestamp [default: `now()`, note: 'Fecha de creación del rol']
-}
 
 Table permissions {
-  id smallint [pk, increment, note: 'Identificador del permiso']
-  module varchar(100) [not null, note: 'Módulo del sistema (ej. users, devices)']
-  submodule varchar(100) [null, note: 'Submódulo opcional']
-  action action_type [not null, note: 'Acción permitida']
-  created_at timestamp [default: `now()`, note: 'Fecha de creación del permiso']
+  id smallint [primary key]
+  module varchar(100)
+  submodule varchar(100)
+  action varchar
+  created_at timestamp
+  updated_at timestamp
 }
 
-Table role_permissions {
-  id smallint [pk, increment]
-  role_id smallint [ref: > roles.id, not null, note: 'Relación con roles']
-  permission_id smallint [ref: > permissions.id, not null, note: 'Relación con permisos']
-  created_at timestamp [default: `now()`]
+Table roles_permissions {
+  id smallint [primary key]
+  role_id smallint
+  permission_id smallint
+  created_at timestamp
+}
 
-  indexes {
-    (role_id, permission_id) [unique, name: 'idx_role_permission_unique']
-  }
+Table roles {
+  id smallint [primary key]
+  name_role varchar(30)
+  icon varchar(99)
+  created_at timestamp
+  updated_at timestamp
 }
 
 Table users {
-  id smallint [pk, increment, note: 'Identificador único del usuario']
-  role_id smallint [ref: > roles.id, not null, note: 'Rol asignado al usuario']
-  username varchar(20) [unique, not null, note: 'Nombre de usuario único']
-  name varchar(50) [not null]
-  last_name varchar(70) [not null]
-  birth_date date [not null]
-  phone varchar(20) [null]
-  password_hash varchar(255) [not null, note: 'Hash bcrypt del password']
-  email varchar(80) [unique, not null, note: 'Email principal del usuario']
-  is_active boolean [default: true, note: 'Estado lógico del usuario']
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [note: 'Última modificación']
+  id integer [primary key]
+  role_id integer
+  profile_id integer
+  auth_code varchar(6)
+  password_hash varchar(255)
+  auth_attemps tinyint
+  is_active bool
+  created_at timestamp
+  updated_at timestamp
+}
 
-  indexes {
-    email [name: 'idx_users_email']
-    username [name: 'idx_users_username']
-    role_id [name: 'idx_users_role']
-  }
+Table user_alerts {
+  id integer [primary key]
+  user_id integer
+  token varchar(255)
+  platform enum("IOS","WEB","ANDROID")
+  is_active bool
+  created_at timestamp
+}
+
+Table profiles {
+  id integer [primary key]
+  name varchar(50)
+  paternal_surname varchar(50)
+  maternal_surname varchar(50)
+  email varchar(80)
+  phone varchar(20)
+  street varchar(60)
+  locality varchar(60)
+  postal_code varchar(5)
+  city varchar(60)
+  state varchar(60)
+  created_at timestamp
+  updated_at timestamp
 }
 
 Table devices {
-  id smallint [pk, increment, note: 'ID autoincremental del dispositivo físico']
-  user_id smallint [ref: > users.id, not null, note: 'Usuario propietario']
-  alias varchar(80) [not null, note: 'Nombre amigable dado por el usuario']
-  mac_address varchar(17) [unique, not null, note: 'Dirección física MAC del ESP32']
-  status device_status_type [default: 'inactive', note: 'Estado de conexión o activación']
-  auto_tracking boolean [default: false, note: 'Flag para seguimiento solar automático']
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [note: 'Última actualización de estado/config']
-
-  indexes {
-    user_id [name: 'idx_devices_user']
-    mac_address [name: 'idx_devices_mac']
-    status [name: 'idx_devices_status']
-  }
-}
-
-Table password_reset_tokens {
-  id smallint [pk, increment]
-  user_id smallint [ref: > users.id, not null]
-  token varchar(255) [unique, not null, note: 'Token seguro generado']
-  expires_at timestamp [not null, note: 'Fecha/hora de expiración']
-  used boolean [default: false]
-  created_at timestamp [default: `now()`]
-
-  indexes {
-    token [name: 'idx_pwd_tokens_token']
-    (user_id, used) [name: 'idx_pwd_tokens_user_status']
-  }
-}
-
-Table push_tokens {
-  id smallint [pk, increment]
-  user_id smallint [ref: > users.id, not null]
-  token varchar(500) [not null, note: 'Token FCM/APNs']
-  platform platform_type [not null]
-  is_active boolean [default: true]
-  created_at timestamp [default: `now()`]
+  id integer [primary key]
+  user_id integer
+  alias varchar(80)
+  mac_address varchar(17)
+  status enum("active", "inactive")
+  version double(2,2)
+  auto_tracking bool
+  auto_repose bool
+  created_at timestamp
   updated_at timestamp
-
-  indexes {
-    user_id [name: 'idx_push_tokens_user']
-  }
 }
 
-Table token_blacklist {
-  id int [pk, increment]
-  token varchar(500) [unique, not null, note: 'Token JWT revocado']
-  user_id smallint [ref: > users.id, not null]
-  expires_at timestamp [not null, note: 'Expiración original del JWT']
-  created_at timestamp [default: `now()`]
-
-  indexes {
-    token [name: 'idx_blacklist_token']
-    expires_at [name: 'idx_blacklist_expiry']
-  }
+Table audits {
+  id integer [primary key]
+  user_id integer
+  ip_address varchar(15)
+  action_detail varchar(255)
+  after_value object
+  before_value object
+  operation_type enum("INSERT","DELETE","UPDATE","LOGIN","LOGOUT","READ")
+  table_name varchar(100)
+  register_id int
+  status enum("revised", "pending")
+  result_status enum("successed", "failed")
+  action_date date
+  created_at timestamp
+  updated_at timestamp
 }
 
-// =====================================================================
-// GRUPO DE COLECCIONES NoSQL - MongoDB (Estructura de Documentos)
-// =====================================================================
+Table system_configuration {
+  id integer [primary key]
+  lockout tinyint
+  auth_attemps tinyint
+  updated_at timestamp
+}
+
+
+
+
+Table schedule {
+  id integer [primary key]
+  device_id integer
+  label varchar(100)
+  start_time date
+  end_time date
+  active bool
+  created_at timestamp
+  updated_at timestamp
+}
 
 Table device_telemetry {
-  _id objectid [pk, note: 'ID único generado por MongoDB']
-  device_id smallint [note: 'FK lógica a devices.id']
-  energy_in_wh decimal [note: 'Energía generada acumulada en Wh']
-  energy_out_wh decimal [note: 'Energía consumida acumulada en Wh']
-  voltage_v decimal [note: 'Voltaje instantáneo (Máx 30V)']
-  current_a decimal [note: 'Corriente instantánea']
-  watts_now decimal [note: 'Potencia instantánea (Watts)']
-  current_angle_deg decimal [note: 'Ángulo actual del servomotor (0-360)']
-  sensor_params json [note: 'Otros parámetros de sensores (LDR, temperatura, etc)']
-  created_at datetime [note: 'Fecha y hora de la lectura de telemetría']
-
-  indexes {
-    (device_id, created_at) [name: 'idx_telemetry_device_time']
-  }
+  id integer [primary key]
+  device_id integer
+  voltage_data object(energy_in_wh,energy_out_wh,voltage_v,current_a,watts_now)
+  servomotor_data object(current_angle_deg)
+  created_at timestamp
+  updated_at timestamp
 }
 
 Table device_daily_summary {
-  _id objectid [pk]
-  device_id smallint [note: 'FK lógica a devices.id']
-  date date [note: 'Fecha del resumen diario']
-  total_energy_in_wh decimal [note: 'Total energía generada en el día']
-  total_energy_out_wh decimal [note: 'Total energía consumida en el día']
-  hourly_watts json [note: 'Arreglo JSON de lecturas horarias de potencia']
-  created_at datetime
-
-  indexes {
-    (device_id, date) [unique, name: 'idx_summary_device_date']
-  }
+  id integer [primary key]
+  device_id integer
+  total_energy_in_wh double
+  total_energy_out_wh double
+  hourly_watts array(object)
+  date date
+  created_at timestamp
+  updated_at timestamp
 }
+
+
 
 Table device_commands {
-  _id objectid [pk]
-  device_id smallint [note: 'FK lógica a devices.id']
-  topic varchar(250) [note: 'Tópico MQTT donde se publica el comando']
-  message json [note: 'Detalle del comando enviado (ej: angle_deg)']
-  status command_status_type [note: 'Estado del comando']
-  delivered_at datetime [null]
-  created_at datetime
-  updated_at datetime
-
-  indexes {
-    (device_id, status) [name: 'idx_commands_device_status']
-    created_at [name: 'idx_commands_created_at']
-  }
+  id integer [primary key]
+  device_id integer
+  topic varchar(50) 
+  message object
+  status enum("queued", "deilvered")
+  delivered_at date
+  created_at timestamp
+  updated_at timestamp
 }
 
-Table schedules {
-  _id objectid [pk]
-  device_id smallint [note: 'FK lógica a devices.id']
-  label varchar(100) [note: 'Etiqueta del horario (ej. Mañana)']
-  start_time datetime [note: 'Hora de inicio de operación']
-  end_time datetime [note: 'Hora de fin de operación']
-  active boolean [default: true]
-  created_at datetime
-  updated_at datetime [null]
 
-  indexes {
-    device_id [name: 'idx_schedules_device']
-  }
+Table sensor_thresholds {
+  id integer [primary key]
+  device_id integer
+  sensor_key varchar(20)
+  voltage_thresholds object 
+  created_at timestamp
+  updated_at timestamp
 }
+
 
 Table alerts {
-  _id objectid [pk]
-  device_id smallint [note: 'FK lógica a devices.id']
-  user_id smallint [note: 'FK lógica a users.id']
-  type alert_type [note: 'Tipo de alerta (generación baja, sobrecarga, etc)']
-  severity alert_severity_type [note: 'Severidad']
-  message text [note: 'Detalle textual de la alerta']
-  acknowledged boolean [default: false]
-  acknowledged_at datetime [null]
-  created_at datetime
-
-  indexes {
-    (user_id, acknowledged) [name: 'idx_alerts_user_unread']
-    (device_id, created_at) [name: 'idx_alerts_device_time']
-  }
+  id integer [primary key]
+  device_id integer
+  title varchar(50)
+  body varchar(100)
+  type varchar(50)
+  severity enum("INFORMATIVE","WARNING","CRITICAL")
+  is_read bool
+  sent_at timestamp
+  read_at timestamp
+  created_at timestamp
+  updated_at timestamp
 }
 
-Table audit_logs {
-  _id objectid [pk]
-  user_id smallint [note: 'FK lógica a users.id']
-  user_email varchar(80) [note: 'Email del usuario (para persistencia histórica)']
-  action varchar(100) [note: 'Acción realizada (LOGIN, CREATE, DELETE, etc)']
-  resource varchar(100) [null, note: 'Recurso afectado']
-  details text [null, note: 'Detalles adicionales en JSON o texto']
-  ip_address varchar(45) [note: 'IP desde la cual se realizó la acción']
-  created_at datetime
-
-  indexes {
-    (user_id, created_at) [name: 'idx_audit_user_time']
-    (action, created_at) [name: 'idx_audit_action_time']
-  }
-}
-
-// ---------------------------------------------------------------------
-// RELACIONES LÓGICAS (NoSQL -> SQL)
-// ---------------------------------------------------------------------
-// DBML permite definir relaciones que no son PK/FK a nivel de motor (en NoSQL),
-// pero son indispensables para la lógica de la aplicación.
-// ---------------------------------------------------------------------
-
-Ref: device_telemetry.device_id > devices.id
-Ref: device_daily_summary.device_id > devices.id
-Ref: device_commands.device_id > devices.id
-Ref: schedules.device_id > devices.id
-Ref: alerts.device_id > devices.id
-Ref: alerts.user_id > users.id
-Ref: audit_logs.user_id > users.id
 
 
-// ---------------------------------------------------------------------
-// TABLE GROUPS (Agrupación Visual)
-// ---------------------------------------------------------------------
 
-TableGroup SQL_Transaccional {
-  roles
-  permissions
-  role_permissions
-  users
-  devices
-  password_reset_tokens
-  push_tokens
-  token_blacklist
-}
 
-TableGroup NoSQL_MongoDB {
-  device_telemetry
-  device_daily_summary
-  device_commands
-  schedules
-  alerts
-  audit_logs
-}
+
+
+Ref user_role: users.role_id > roles.id 
+
+Ref user_profile: users.profile_id > profiles.id 
+
+Ref device_user: devices.user_id > users.id
+
+Ref roles_permissions: roles_permissions.permission_id > permissions.id
+
+Ref roles_permissions: roles_permissions.role_id > roles.id
+
+
+Ref alerts_user: user_alerts.user_id > users.id
+

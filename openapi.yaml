@@ -5,7 +5,7 @@ info:
     API REST para el sistema de monitoreo y control de paneles solares **Ojos de Sol**.
 
     ## Módulos
-    - **Autenticación**: Registro, login, logout y recuperación de contraseña con JWT.
+    - **Autenticación**: Registro, login, logout, 2FA, bloqueo de cuenta y recuperación de contraseña con JWT.
     - **Usuarios**: Gestión administrativa de cuentas (CRUD, activar/desactivar).
     - **Roles y Permisos**: Gestión de roles diferenciados (Administrador, Cliente).
     - **Dispositivos**: Vinculación, configuración y gestión de dispositivos ESP32.
@@ -114,7 +114,7 @@ paths:
       summary: Iniciar sesión
       description: |
         Autentica al usuario mediante correo electrónico y contraseña.
-        Devuelve un token JWT para acceder a los recursos protegidos.
+        Si la contraseña es correcta, envía un OTP de 6 dígitos al correo registrado del usuario.
         Todas las comunicaciones deben realizarse sobre HTTPS/TLS 1.2+.
       operationId: loginUser
       tags:
@@ -127,11 +127,11 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: Autenticación exitosa
+          description: Desafío de 2FA generado correctamente
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/TwoFactorChallengeResponse"
         "400":
           description: Datos de inicio de sesión inválidos
           content:
@@ -147,13 +147,95 @@ paths:
                     status: 400
                     detail: "La solicitud de inicio de sesión contiene errores en uno o más campos."
                     instance: "/auth/login"
-                    invalid_params:
-                      - name: "email"
-                        reason: "Se requiere una dirección de correo electrónico válida."
-                      - name: "password"
-                        reason: "Se requiere la contraseña de acceso."
+                    code: "CLIENT_VALIDATION_ERROR"
+                    technical_detail: "Validation failed for fields: 'email', 'password'."
+                    user_message: "Algunos campos contienen errores. Por favor revísalos e intenta de nuevo."
+                    errors:
+                      - detail: "Se requiere una dirección de correo electrónico válida."
+                        pointer: "/email"
+                      - detail: "Se requiere la contraseña de acceso."
+                        pointer: "/password"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
+        "423":
+          $ref: "#/components/responses/AccountLockedError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/2fa/verify:
+    post:
+      summary: Verificar el código de autenticación de dos factores
+      description: Confirma el código enviado al usuario y devuelve el token JWT si es válido.
+      operationId: verifyTwoFactorCode
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFactorVerifyRequest"
+      responses:
+        "200":
+          description: Verificación exitosa de 2FA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Código 2FA inválido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                twoFactorInvalidCode:
+                  summary: Código 2FA inválido
+                  value:
+                    type: "https://api.ojosdesol.com/problems/client-validation-error"
+                    title: "Error de Validación"
+                    status: 422
+                    detail: "The request contains fields with invalid or missing values."
+                    instance: "/auth/2fa/verify"
+                    code: "CLIENT_VALIDATION_ERROR"
+                    technical_detail: "Validation failed for fields: 'email', 'code'."
+                    user_message: "El código ingresado no es válido o ha expirado."
+                    errors:
+                      - detail: "El correo electrónico es obligatorio."
+                        pointer: "/email"
+                      - detail: "El código de verificación debe contener 6 dígitos."
+                        pointer: "/code"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "423":
+          $ref: "#/components/responses/AccountLockedError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /auth/2fa/resend:
+    post:
+      summary: Reenviar el código de autenticación de dos factores
+      description: Genera un nuevo código y lo reenvía al correo registrado del usuario.
+      operationId: resendTwoFactorCode
+      tags:
+        - Autenticación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFactorResendRequest"
+      responses:
+        "200":
+          description: Código 2FA reenviado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoFactorChallengeResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "423":
+          $ref: "#/components/responses/AccountLockedError"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -1987,6 +2069,25 @@ components:
                 technical_detail: "Authorization header is missing or the JWT token has expired. Token exp: 2026-06-17T10:00:00Z"
                 user_message: "Tu sesión ha expirado. Por favor inicia sesión nuevamente."
 
+    AccountLockedError:
+      description: La cuenta del usuario está bloqueada temporalmente por demasiados intentos fallidos
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            accountLocked:
+              summary: Usuario bloqueado
+              value:
+                type: "https://api.ojosdesol.com/problems/client-account-locked"
+                title: "Cuenta bloqueada"
+                status: 423
+                detail: "The account is temporarily locked due to too many failed authentication attempts."
+                instance: "/auth/login"
+                code: "CLIENT_ACCOUNT_LOCKED"
+                technical_detail: "auth_attemps reached system_configuration.lockout threshold. Locked until 2026-06-24T13:00:00Z."
+                user_message: "Tu cuenta está bloqueada temporalmente. Intenta más tarde o contacta a soporte."
+
     ForbiddenError:
       description: El usuario no tiene permisos suficientes
       content:
@@ -2305,6 +2406,62 @@ components:
           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         user:
           $ref: "#/components/schemas/User"
+
+    TwoFactorChallengeResponse:
+      type: object
+      required:
+        - message
+        - delivery_channel
+        - email_masked
+        - expires_in_seconds
+      properties:
+        message:
+          type: string
+          description: Mensaje para informar al usuario que el código fue enviado por correo.
+          example: "Se ha enviado un código de verificación a tu correo registrado."
+        delivery_channel:
+          type: string
+          enum: [EMAIL]
+          description: Canal usado para enviar el código OTP.
+          example: "EMAIL"
+        email_masked:
+          type: string
+          description: Destino parcialmente oculto para mostrar al usuario.
+          example: "c*****@ojosdesol.com"
+        expires_in_seconds:
+          type: integer
+          description: Tiempo de vida del desafío en segundos.
+          example: 300
+
+    TwoFactorVerifyRequest:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+          format: email
+          description: Correo electrónico del usuario que recibió el OTP.
+          example: "usuario@ojosdesol.com"
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+          pattern: "^[0-9]{6}$"
+          description: Código de 6 dígitos recibido por el usuario.
+          example: "483921"
+
+    TwoFactorResendRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          description: Correo electrónico al que se reenvía el OTP.
+          example: "usuario@ojosdesol.com"
 
     # ───────────────────────────────────────────
     # SQL: Tabla users
@@ -2996,67 +3153,48 @@ components:
           type: boolean
           default: true
 
-    # ─── Auditoría (lógica de negocio) ───
+    # ─── Auditoría (tabla audits) ───
     AuditLog:
       type: object
       properties:
         id:
-          type: string
-          format: uuid
-        user_id:
           type: integer
-          description: ID del usuario que realizó la acción.
           example: 1
-        user_email:
+        action_detail:
           type: string
-          format: email
-          example: "carlos.mendez@ojosdesol.com"
-        action:
+          description: Descripción de la acción realizada.
+          example: "Usuario inició sesión correctamente"
+        before_value:
           type: string
-          enum:
-            [
-              LOGIN,
-              LOGOUT,
-              CREATE,
-              UPDATE,
-              DELETE,
-              COMMAND_SENT,
-              DEVICE_LINKED,
-              DEVICE_UNLINKED,
-            ]
-          example: "LOGIN"
-        resource:
+          nullable: true
+          description: Valor previo al cambio.
+          example: "{\"status\":\"pending\"}"
+        after_value:
           type: string
-          description: Recurso afectado por la acción.
-          example: "device:1"
-        details:
+          nullable: true
+          description: Valor posterior al cambio.
+          example: "{\"status\":\"completed\"}"
+        operation_type:
           type: string
-          description: Detalles adicionales de la acción realizada.
-          example: "Dispositivo 'Panel Solar Techo Norte' vinculado exitosamente"
-        ip_address:
+          description: Tipo de operación registrada.
+          example: "UPDATE"
+        table_name:
           type: string
-          example: "192.168.1.100"
-          "400":
-            description: Token o plataforma inválidos
-            content:
-              application/problem+json:
-                schema:
-                  $ref: "#/components/schemas/ErrorResponse"
-                examples:
-                  pushTokenValidation:
-                    summary: Error de registro de push token
-                    value:
-                      type: "https://api.ojosdesol.com/errors/validation-error"
-                      title: "Error de Validación"
-                      status: 400
-                      detail: "La solicitud para registrar el token de notificaciones push contiene errores."
-                      instance: "/notifications/push/register"
-                      invalid_params:
-                        - name: "token"
-                          reason: "El token de notificación push es obligatorio."
-                        - name: "platform"
-                          reason: "La plataforma debe ser IOS o ANDROID."
-        timestamp:
+          description: Tabla afectada por la operación.
+          example: "devices"
+        register_id:
+          type: integer
+          description: Identificador del registro afectado.
+          example: 42
+        status:
+          type: string
+          description: Estado general del evento de auditoría.
+          example: "SUCCESS"
+        result_status:
+          type: string
+          description: Resultado final de la operación.
+          example: "APPLIED"
+        action_date:
           type: string
           format: date-time
           example: "2026-06-20T12:00:00Z"
